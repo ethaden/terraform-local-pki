@@ -1,0 +1,2 @@
+# Recommendation: Ignore *.pem files to avoid committing them to Github accidentially.
+*.pem
