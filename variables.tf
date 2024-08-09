@@ -61,7 +61,7 @@ variable "rsa_bits" {
 variable "server_names" {
   description = "List of names of servers to generate keys and signed certificates for"
   type        = any
-  default     = ["server"]
+  default     = []
   validation {
     condition     = can(tomap(var.server_names)) || can(toset(var.server_names))
     error_message = "The server_names value must be either a list of client names of a map of (name => hostname)"
@@ -71,7 +71,7 @@ variable "server_names" {
 variable "client_names" {
   description = "Specifies clients to generate keys and signed certificates for. Either a list of names or a map of (name => hostname). In the latter case, the hostname is used a certificate subject"
   type        = any
-  default     = ["client"]
+  default     = []
   validation {
     condition     = can(tomap(var.client_names)) || can(toset(var.client_names))
     error_message = "The client_names value must be either a list of client names of a map of (name => hostname)"
