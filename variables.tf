@@ -77,3 +77,15 @@ variable "client_names" {
     error_message = "The client_names value must be either a list of client names of a map of (name => hostname)"
   }
 }
+
+variable "create_keystores" {
+    type      = bool
+    default   = false
+    description = "Set to true to generate keystores for each certificate. Requires \"keytool\" on the command line"
+}
+
+variable "keystore_passphrase" {
+    type      = string
+    default   = "123456"
+    description = "The passphrase used if creating keystores. Please update this variable and change the passphrase for each file afterwords before distributing them to users"
+}

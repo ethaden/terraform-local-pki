@@ -157,3 +157,25 @@ resource "local_sensitive_file" "client_cert_files" {
   content  = tls_locally_signed_cert.client_certs[each.key].cert_pem
   filename = "${var.cert_path}/client_${each.key}_crt.pem"
 }
+
+# Optionally, convert client files to key store
+resource "null_resource" "create_client_keystores" {
+  for_each = var.create_keystores ? try(tomap((var.cert_path == "") ? {} : var.client_names), toset((var.cert_path == "") ? [] : var.client_names)) : []
+  triggers = {
+    filename = "${var.cert_path}/client_${each.key}_crt.pem"
+  }
+
+  provisioner "local-exec" {
+    command     = "keytool"
+    working_dir = var.cert_path
+  }
+}
+
+data "local_file" "test" {
+    for_each = var.create_keystores ? try(tomap((var.cert_path == "") ? {} : var.client_names), toset((var.cert_path == "") ? [] : var.client_names)) : []
+    filename = null_resource.create_client_keystores[each.key].triggers.filename
+}
+
+# output "result" {
+#   value = data.local_file.test.content
+# }
