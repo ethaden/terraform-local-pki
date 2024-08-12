@@ -81,7 +81,7 @@ variable "client_names" {
 variable "create_keystores" {
     type      = bool
     default   = false
-    description = "Set to true to generate keystores for each certificate. Requires \"keytool\" on the command line"
+    description = "Set to true to generate keystores for each certificate. Requires \"openssl\" and \"keytool\" on the command line"
 }
 
 variable "keystore_passphrase" {

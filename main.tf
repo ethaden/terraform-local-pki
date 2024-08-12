@@ -42,6 +42,12 @@ resource "local_sensitive_file" "ca_cert_file" {
   filename = "${var.cert_path}/ca_crt.pem"
 }
 
+
+#####################################
+# SERVERS 
+#####################################
+
+
 # Generate a ECDSA key used as part of the server
 resource "tls_private_key" "server_keys" {
   for_each = try(tomap(var.server_names), toset(var.server_names))
@@ -97,6 +103,59 @@ resource "local_sensitive_file" "server_key_files" {
   content  = tls_private_key.server_keys[each.key].private_key_pem
   filename = "${var.cert_path}/server_${each.key}_key.pem"
 }
+
+# Optionally, convert client files to key store
+# 1. Convert them to p12 format
+resource "null_resource" "server_cert_and_key_files_p12" {
+  # Do not write files if cert_path is empty. Otherwise try to cast client_names to map of (name => hostname), or if the fails to set of client names
+  for_each = try(tomap((var.cert_path == "") ? {} : var.server_names), toset((var.cert_path == "") ? [] : var.server_names))
+
+  triggers = {
+    filename = local_sensitive_file.server_key_files[each.key].filename
+    checksum = sha256(local_sensitive_file.server_key_files[each.key].content)
+  }
+
+  provisioner "local-exec" {
+    command     = "openssl pkcs12 -export -in $CERT_FILE -inkey $KEY_FILE -out $OUTPUT_FILE -name server -CAfile $CA_FILE -caname root -password pass:$PASS"
+    environment = {
+        KEY_FILE = "${var.cert_path}/server_${each.key}_key.pem"
+        CERT_FILE = "${var.cert_path}/server_${each.key}_crt.pem"
+        OUTPUT_FILE = "${var.cert_path}/server_${each.key}.p12"
+        CA_FILE = "${var.cert_path}/ca_key.pem"
+        PASS = var.keystore_passphrase
+    }
+    working_dir = path.root
+  }
+}
+
+data "local_sensitive_file" "server_cert_and_key_files_p12_files" {
+  # Do not write files if cert_path is empty. Otherwise try to cast server_names to map of (name => hostname), or if the fails to set of server names
+  for_each = try(tomap((var.cert_path == "") ? {} : var.server_names), toset((var.cert_path == "") ? [] : var.server_names))
+
+  filename = "${var.cert_path}/server_${each.key}.p12"
+  depends_on = [ null_resource.server_cert_and_key_files_p12 ]
+}
+
+resource "null_resource" "create_server_keystores" {
+  for_each = var.create_keystores ? try(tomap((var.cert_path == "") ? {} : var.server_names), toset((var.cert_path == "") ? [] : var.server_names)) : []
+  triggers = {
+    checksum = sha256(data.local_sensitive_file.server_cert_and_key_files_p12_files[each.key].content)
+  }
+  provisioner "local-exec" {
+    command     = "keytool -importkeystore -noprompt -deststorepass password -destkeystore $OUTPUT_FILE -srckeystore $INPUT_FILE -srcstoretype PKCS12 -srcstorepass $PASS -alias server"
+    environment = {
+        OUTPUT_FILE = "${var.cert_path}/server_${each.key}.jks"
+        INPUT_FILE = "${var.cert_path}/server_${each.key}.p12"
+        PASS = var.keystore_passphrase
+    }
+    working_dir = path.root
+  }
+}
+
+
+#####################################
+# CLIENTS 
+#####################################
 
 # Generate a ECDSA key used as part of the clients
 resource "tls_private_key" "client_keys" {
@@ -159,23 +218,50 @@ resource "local_sensitive_file" "client_cert_files" {
 }
 
 # Optionally, convert client files to key store
-resource "null_resource" "create_client_keystores" {
-  for_each = var.create_keystores ? try(tomap((var.cert_path == "") ? {} : var.client_names), toset((var.cert_path == "") ? [] : var.client_names)) : []
+# 1. Convert them to p12 format
+resource "null_resource" "client_cert_and_key_files_p12" {
+  # Do not write files if cert_path is empty. Otherwise try to cast client_names to map of (name => hostname), or if the fails to set of client names
+  for_each = try(tomap((var.cert_path == "") ? {} : var.client_names), toset((var.cert_path == "") ? [] : var.client_names))
+
   triggers = {
-    filename = "${var.cert_path}/client_${each.key}_crt.pem"
+    filename = local_sensitive_file.client_key_files[each.key].filename
+    checksum = sha256(local_sensitive_file.client_key_files[each.key].content)
   }
 
   provisioner "local-exec" {
-    command     = "keytool"
-    working_dir = var.cert_path
+    command     = "openssl pkcs12 -export -in $CERT_FILE -inkey $KEY_FILE -out $OUTPUT_FILE -name client -CAfile $CA_FILE -caname root -password pass:$PASS"
+    environment = {
+        KEY_FILE = "${var.cert_path}/client_${each.key}_key.pem"
+        CERT_FILE = "${var.cert_path}/client_${each.key}_crt.pem"
+        OUTPUT_FILE = "${var.cert_path}/client_${each.key}.p12"
+        CA_FILE = "${var.cert_path}/ca_key.pem"
+        PASS = var.keystore_passphrase
+    }
+    working_dir = path.root
   }
 }
 
-data "local_file" "test" {
-    for_each = var.create_keystores ? try(tomap((var.cert_path == "") ? {} : var.client_names), toset((var.cert_path == "") ? [] : var.client_names)) : []
-    filename = null_resource.create_client_keystores[each.key].triggers.filename
+data "local_sensitive_file" "client_cert_and_key_files_p12_files" {
+  # Do not write files if cert_path is empty. Otherwise try to cast client_names to map of (name => hostname), or if the fails to set of client names
+  for_each = try(tomap((var.cert_path == "") ? {} : var.client_names), toset((var.cert_path == "") ? [] : var.client_names))
+
+  filename = "${var.cert_path}/client_${each.key}.p12"
+  depends_on = [ null_resource.client_cert_and_key_files_p12 ]
 }
 
-# output "result" {
-#   value = data.local_file.test.content
-# }
+resource "null_resource" "create_client_keystores" {
+  #for_each = var.create_keystores ? try(tomap((var.cert_path == "") ? {} : var.client_names), toset((var.cert_path == "") ? [] : var.client_names)) : []
+  for_each = var.create_keystores ? try(tomap((var.cert_path == "") ? {} : var.client_names), toset((var.cert_path == "") ? [] : var.client_names)) : []
+  triggers = {
+    checksum = sha256(data.local_sensitive_file.client_cert_and_key_files_p12_files[each.key].content)
+  }
+  provisioner "local-exec" {
+    command     = "keytool -importkeystore -noprompt -deststorepass password -destkeystore $OUTPUT_FILE -srckeystore $INPUT_FILE -srcstoretype PKCS12 -srcstorepass $PASS -alias client"
+    environment = {
+        OUTPUT_FILE = "${var.cert_path}/client_${each.key}.jks"
+        INPUT_FILE = "${var.cert_path}/client_${each.key}.p12"
+        PASS = var.keystore_passphrase
+    }
+    working_dir = path.root
+  }
+}

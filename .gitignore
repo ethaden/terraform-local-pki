@@ -1,2 +1,8 @@
 # Recommendation: Ignore *.pem files to avoid committing them to Github accidentially.
 *.pem
+terraform.tfvars
+generated
+.terraform
+.terraform.lock.hcl
+terraform.tfstate.backup
+terraform.tfstate
