@@ -64,10 +64,11 @@ resource "tls_cert_request" "openvpn_pki_server_csrs" {
   private_key_pem = tls_private_key.server_keys[each.key].private_key_pem
 
   subject {
-    common_name         = each.value
+    common_name         = each.key
     organization        = var.organization
     organizational_unit = var.organizational_unit
   }
+  uris = try(toset(each.value), toset([each.value]))
 }
 
 # Sign the server keys with our CA key
@@ -108,7 +109,7 @@ resource "local_sensitive_file" "server_key_files" {
 # 1. Convert them to p12 format
 resource "terraform_data" "server_cert_and_key_files_p12" {
   # Do not write files if cert_path is empty. Otherwise try to cast client_names to map of (name => hostname), or if the fails to set of client names
-  for_each = var.create_keystores ? try(tomap((var.cert_path == "") ? {} : var.server_names), toset((var.cert_path == "") ? [] : var.server_names)) : []
+  for_each = try(tomap((var.cert_path == "" || !var.create_keystores) ? {} : var.server_names), toset((var.cert_path == "" || !var.create_keystores) ? [] : var.server_names))
 
   #filename = "${var.cert_path}/server_${each.key}.p12"
   #input = local_sensitive_file.server_key_files[each.key]
@@ -132,14 +133,14 @@ resource "terraform_data" "server_cert_and_key_files_p12" {
 
 data "local_sensitive_file" "server_cert_and_key_files_p12_files" {
   # Do not write files if cert_path is empty. Otherwise try to cast server_names to map of (name => hostname), or if the fails to set of server names
-  for_each = var.create_keystores ? try(tomap((var.cert_path == "") ? {} : var.server_names), toset((var.cert_path == "") ? [] : var.server_names)) : []
+  for_each = try(tomap((var.cert_path == "" || !var.create_keystores) ? {} : var.server_names), toset((var.cert_path == "" || !var.create_keystores) ? [] : var.server_names))
 
   filename = "${var.cert_path}/server_${each.key}.p12"
   depends_on = [ terraform_data.server_cert_and_key_files_p12 ]
 }
 
 resource "terraform_data" "create_server_keystores" {
-  for_each = var.create_keystores ? try(tomap((var.cert_path == "") ? {} : var.server_names), toset((var.cert_path == "") ? [] : var.server_names)) : []
+  for_each = try(tomap((var.cert_path == "" || !var.create_keystores) ? {} : var.server_names), toset((var.cert_path == "" || !var.create_keystores) ? [] : var.server_names))
   triggers_replace = {
     checksum = sha256(data.local_sensitive_file.server_cert_and_key_files_p12_files[each.key].content)
   }
@@ -177,10 +178,11 @@ resource "tls_cert_request" "client_csrs" {
   private_key_pem = tls_private_key.client_keys[each.key].private_key_pem
 
   subject {
-    common_name         = each.value
+    common_name         = each.key
     organization        = var.organization
     organizational_unit = var.organizational_unit
   }
+  uris = try(toset(each.value), toset([each.value]))
 }
 
 # Sign the client keys with our CA key
@@ -223,7 +225,7 @@ resource "local_sensitive_file" "client_cert_files" {
 # 1. Convert them to p12 format
 resource "terraform_data" "client_cert_and_key_files_p12" {
   # Do not write files if cert_path is empty. Otherwise try to cast client_names to map of (name => hostname), or if the fails to set of client names
-  for_each = var.create_keystores ? try(tomap((var.cert_path == "") ? {} : var.client_names), toset((var.cert_path == "") ? [] : var.client_names)) : []
+  for_each = try(tomap((var.cert_path == "" || !var.create_keystores) ? {} : var.client_names), toset((var.cert_path == "" || !var.create_keystores) ? [] : var.client_names))
 
   triggers_replace = {
     filename = local_sensitive_file.client_key_files[each.key].filename
@@ -245,14 +247,15 @@ resource "terraform_data" "client_cert_and_key_files_p12" {
 
 data "local_sensitive_file" "client_cert_and_key_files_p12_files" {
   # Do not write files if cert_path is empty. Otherwise try to cast client_names to map of (name => hostname), or if the fails to set of client names
-  for_each = var.create_keystores ? try(tomap((var.cert_path == "") ? {} : var.client_names), toset((var.cert_path == "") ? [] : var.client_names)) : []
+#  for_each = try(tomap((var.cert_path == "") ? {} : var.client_names), toset((var.cert_path == "") ? [] : var.client_names)) : try(tomap((var.cert_path == "") ? {} : var.client_names), toset((var.cert_path == "") ? []
+  for_each = try(tomap((var.cert_path == "" || !var.create_keystores) ? {} : var.client_names), toset((var.cert_path == "" || !var.create_keystores) ? [] : var.client_names))
 
   filename = "${var.cert_path}/client_${each.key}.p12"
   depends_on = [ terraform_data.client_cert_and_key_files_p12 ]
 }
 
 resource "terraform_data" "create_client_keystores" {
-  for_each = var.create_keystores ? try(tomap((var.cert_path == "") ? {} : var.client_names), toset((var.cert_path == "") ? [] : var.client_names)) : []
+  for_each = try(tomap((var.cert_path == "" || !var.create_keystores) ? {} : var.client_names), toset((var.cert_path == "" || !var.create_keystores) ? [] : var.client_names))
   triggers_replace = {
     checksum = sha256(data.local_sensitive_file.client_cert_and_key_files_p12_files[each.key].content)
   }

@@ -64,7 +64,7 @@ variable "server_names" {
   default     = []
   validation {
     condition     = can(tomap(var.server_names)) || can(toset(var.server_names))
-    error_message = "The server_names value must be either a list of client names of a map of (name => hostname)"
+    error_message = "The server_names value must be either a list of server names ([\"server1\", \"server2\"]) of a map of name to hostnames ({\"server1\": [\"hostname1\", \"hostname2\"], \"server2\": [\"hostname3\"]})"
   }
 }
 
@@ -74,7 +74,7 @@ variable "client_names" {
   default     = []
   validation {
     condition     = can(tomap(var.client_names)) || can(toset(var.client_names))
-    error_message = "The client_names value must be either a list of client names of a map of (name => hostname)"
+    error_message = "The client_names value must be either a list of client names ([\"client1\", \"client2\"]) of a map of name to hostnames ({\"client1\": [\"hostname1\", \"hostname2\"], \"client2\": [\"hostname3\"]})"
   }
 }
 
