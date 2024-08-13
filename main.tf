@@ -88,7 +88,7 @@ resource "tls_locally_signed_cert" "server_certs" {
 }
 
 # Write the server cert to a file
-resource "local_sensitive_file" "server_certs_files" {
+resource "local_sensitive_file" "server_cert_files" {
   # Do not write files if cert_path is empty. Otherwise try to cast client_names to map of (name => hostname), or if the fails to set of client names
   for_each = try(tomap((var.cert_path == "") ? {} : var.server_names), toset((var.cert_path == "") ? [] : var.server_names))
 
@@ -106,20 +106,22 @@ resource "local_sensitive_file" "server_key_files" {
 
 # Optionally, convert client files to key store
 # 1. Convert them to p12 format
-resource "null_resource" "server_cert_and_key_files_p12" {
+resource "terraform_data" "server_cert_and_key_files_p12" {
   # Do not write files if cert_path is empty. Otherwise try to cast client_names to map of (name => hostname), or if the fails to set of client names
-  for_each = try(tomap((var.cert_path == "") ? {} : var.server_names), toset((var.cert_path == "") ? [] : var.server_names))
+  for_each = var.create_keystores ? try(tomap((var.cert_path == "") ? {} : var.server_names), toset((var.cert_path == "") ? [] : var.server_names)) : []
 
-  triggers = {
-    filename = local_sensitive_file.server_key_files[each.key].filename
+  #filename = "${var.cert_path}/server_${each.key}.p12"
+  #input = local_sensitive_file.server_key_files[each.key]
+  triggers_replace = {
+    filename = local_sensitive_file.server_key_files[each.key].content
     checksum = sha256(local_sensitive_file.server_key_files[each.key].content)
   }
 
   provisioner "local-exec" {
     command     = "openssl pkcs12 -export -in $CERT_FILE -inkey $KEY_FILE -out $OUTPUT_FILE -name server -CAfile $CA_FILE -caname root -password pass:$PASS"
     environment = {
-        KEY_FILE = "${var.cert_path}/server_${each.key}_key.pem"
-        CERT_FILE = "${var.cert_path}/server_${each.key}_crt.pem"
+        KEY_FILE = local_sensitive_file.server_key_files[each.key].filename
+        CERT_FILE = local_sensitive_file.server_cert_files[each.key].filename
         OUTPUT_FILE = "${var.cert_path}/server_${each.key}.p12"
         CA_FILE = "${var.cert_path}/ca_key.pem"
         PASS = var.keystore_passphrase
@@ -130,15 +132,15 @@ resource "null_resource" "server_cert_and_key_files_p12" {
 
 data "local_sensitive_file" "server_cert_and_key_files_p12_files" {
   # Do not write files if cert_path is empty. Otherwise try to cast server_names to map of (name => hostname), or if the fails to set of server names
-  for_each = try(tomap((var.cert_path == "") ? {} : var.server_names), toset((var.cert_path == "") ? [] : var.server_names))
+  for_each = var.create_keystores ? try(tomap((var.cert_path == "") ? {} : var.server_names), toset((var.cert_path == "") ? [] : var.server_names)) : []
 
   filename = "${var.cert_path}/server_${each.key}.p12"
-  depends_on = [ null_resource.server_cert_and_key_files_p12 ]
+  depends_on = [ terraform_data.server_cert_and_key_files_p12 ]
 }
 
-resource "null_resource" "create_server_keystores" {
+resource "terraform_data" "create_server_keystores" {
   for_each = var.create_keystores ? try(tomap((var.cert_path == "") ? {} : var.server_names), toset((var.cert_path == "") ? [] : var.server_names)) : []
-  triggers = {
+  triggers_replace = {
     checksum = sha256(data.local_sensitive_file.server_cert_and_key_files_p12_files[each.key].content)
   }
   provisioner "local-exec" {
@@ -219,11 +221,11 @@ resource "local_sensitive_file" "client_cert_files" {
 
 # Optionally, convert client files to key store
 # 1. Convert them to p12 format
-resource "null_resource" "client_cert_and_key_files_p12" {
+resource "terraform_data" "client_cert_and_key_files_p12" {
   # Do not write files if cert_path is empty. Otherwise try to cast client_names to map of (name => hostname), or if the fails to set of client names
-  for_each = try(tomap((var.cert_path == "") ? {} : var.client_names), toset((var.cert_path == "") ? [] : var.client_names))
+  for_each = var.create_keystores ? try(tomap((var.cert_path == "") ? {} : var.client_names), toset((var.cert_path == "") ? [] : var.client_names)) : []
 
-  triggers = {
+  triggers_replace = {
     filename = local_sensitive_file.client_key_files[each.key].filename
     checksum = sha256(local_sensitive_file.client_key_files[each.key].content)
   }
@@ -231,8 +233,8 @@ resource "null_resource" "client_cert_and_key_files_p12" {
   provisioner "local-exec" {
     command     = "openssl pkcs12 -export -in $CERT_FILE -inkey $KEY_FILE -out $OUTPUT_FILE -name client -CAfile $CA_FILE -caname root -password pass:$PASS"
     environment = {
-        KEY_FILE = "${var.cert_path}/client_${each.key}_key.pem"
-        CERT_FILE = "${var.cert_path}/client_${each.key}_crt.pem"
+        KEY_FILE = local_sensitive_file.client_key_files[each.key].filename
+        CERT_FILE = local_sensitive_file.client_cert_files[each.key].filename
         OUTPUT_FILE = "${var.cert_path}/client_${each.key}.p12"
         CA_FILE = "${var.cert_path}/ca_key.pem"
         PASS = var.keystore_passphrase
@@ -243,16 +245,15 @@ resource "null_resource" "client_cert_and_key_files_p12" {
 
 data "local_sensitive_file" "client_cert_and_key_files_p12_files" {
   # Do not write files if cert_path is empty. Otherwise try to cast client_names to map of (name => hostname), or if the fails to set of client names
-  for_each = try(tomap((var.cert_path == "") ? {} : var.client_names), toset((var.cert_path == "") ? [] : var.client_names))
+  for_each = var.create_keystores ? try(tomap((var.cert_path == "") ? {} : var.client_names), toset((var.cert_path == "") ? [] : var.client_names)) : []
 
   filename = "${var.cert_path}/client_${each.key}.p12"
-  depends_on = [ null_resource.client_cert_and_key_files_p12 ]
+  depends_on = [ terraform_data.client_cert_and_key_files_p12 ]
 }
 
-resource "null_resource" "create_client_keystores" {
-  #for_each = var.create_keystores ? try(tomap((var.cert_path == "") ? {} : var.client_names), toset((var.cert_path == "") ? [] : var.client_names)) : []
+resource "terraform_data" "create_client_keystores" {
   for_each = var.create_keystores ? try(tomap((var.cert_path == "") ? {} : var.client_names), toset((var.cert_path == "") ? [] : var.client_names)) : []
-  triggers = {
+  triggers_replace = {
     checksum = sha256(data.local_sensitive_file.client_cert_and_key_files_p12_files[each.key].content)
   }
   provisioner "local-exec" {
