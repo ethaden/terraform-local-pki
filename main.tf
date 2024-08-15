@@ -145,7 +145,7 @@ resource "terraform_data" "create_server_keystores" {
     checksum = sha256(data.local_sensitive_file.server_cert_and_key_files_p12_files[each.key].content)
   }
   provisioner "local-exec" {
-    command     = "keytool -importkeystore -noprompt -deststorepass password -destkeystore $OUTPUT_FILE -srckeystore $INPUT_FILE -srcstoretype PKCS12 -srcstorepass $PASS -alias server"
+    command     = "keytool -importkeystore -noprompt -deststorepass $PASS -destkeystore $OUTPUT_FILE -srckeystore $INPUT_FILE -srcstoretype PKCS12 -srcstorepass $PASS -alias server"
     environment = {
         OUTPUT_FILE = "${var.cert_path}/server_${each.key}.jks"
         INPUT_FILE = "${var.cert_path}/server_${each.key}.p12"
@@ -260,7 +260,7 @@ resource "terraform_data" "create_client_keystores" {
     checksum = sha256(data.local_sensitive_file.client_cert_and_key_files_p12_files[each.key].content)
   }
   provisioner "local-exec" {
-    command     = "keytool -importkeystore -noprompt -deststorepass password -destkeystore $OUTPUT_FILE -srckeystore $INPUT_FILE -srcstoretype PKCS12 -srcstorepass $PASS -alias client"
+    command     = "keytool -importkeystore -noprompt -deststorepass $PASS -destkeystore $OUTPUT_FILE -srckeystore $INPUT_FILE -srcstoretype PKCS12 -srcstorepass $PASS -alias client"
     environment = {
         OUTPUT_FILE = "${var.cert_path}/client_${each.key}.jks"
         INPUT_FILE = "${var.cert_path}/client_${each.key}.p12"
