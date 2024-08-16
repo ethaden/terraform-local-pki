@@ -119,13 +119,14 @@ resource "terraform_data" "server_cert_and_key_files_p12" {
   }
 
   provisioner "local-exec" {
-    command     = "openssl pkcs12 -export -in $CERT_FILE -inkey $KEY_FILE -out $OUTPUT_FILE -name server -CAfile $CA_FILE -caname root -password pass:$PASS"
+    command     = "openssl pkcs12 -export -in $CERT_FILE -inkey $KEY_FILE -out $OUTPUT_FILE -name server -CAfile $CA_FILE -caname root $INCLUDE_CHAIN -password pass:$PASS"
     environment = {
         KEY_FILE = local_sensitive_file.server_key_files[each.key].filename
         CERT_FILE = local_sensitive_file.server_cert_files[each.key].filename
         OUTPUT_FILE = "${var.cert_path}/server_${each.key}.p12"
-        CA_FILE = "${var.cert_path}/ca_key.pem"
+        CA_FILE = "${var.cert_path}/ca_crt.pem"
         PASS = var.keystore_passphrase
+        INCLUDE_CHAIN = var.include_ca_in_keystores ? "-chain" : ""
     }
     working_dir = path.root
   }
@@ -149,6 +150,7 @@ resource "terraform_data" "create_server_keystores" {
     environment = {
         OUTPUT_FILE = "${var.cert_path}/server_${each.key}.jks"
         INPUT_FILE = "${var.cert_path}/server_${each.key}.p12"
+        CA_FILE = "${var.cert_path}/ca_crt.pem"
         PASS = var.keystore_passphrase
     }
     working_dir = path.root
@@ -233,13 +235,14 @@ resource "terraform_data" "client_cert_and_key_files_p12" {
   }
 
   provisioner "local-exec" {
-    command     = "openssl pkcs12 -export -in $CERT_FILE -inkey $KEY_FILE -out $OUTPUT_FILE -name client -CAfile $CA_FILE -caname root -password pass:$PASS"
+    command     = "openssl pkcs12 -export -in $CERT_FILE -inkey $KEY_FILE -out $OUTPUT_FILE -name client -CAfile $CA_FILE -caname root $INCLUDE_CHAIN -password pass:$PASS"
     environment = {
         KEY_FILE = local_sensitive_file.client_key_files[each.key].filename
         CERT_FILE = local_sensitive_file.client_cert_files[each.key].filename
         OUTPUT_FILE = "${var.cert_path}/client_${each.key}.p12"
-        CA_FILE = "${var.cert_path}/ca_key.pem"
+        CA_FILE = "${var.cert_path}/ca_crt.pem"
         PASS = var.keystore_passphrase
+        INCLUDE_CHAIN = var.include_ca_in_keystores ? "-chain" : ""
     }
     working_dir = path.root
   }
@@ -264,6 +267,7 @@ resource "terraform_data" "create_client_keystores" {
     environment = {
         OUTPUT_FILE = "${var.cert_path}/client_${each.key}.jks"
         INPUT_FILE = "${var.cert_path}/client_${each.key}.p12"
+        CA_FILE = "${var.cert_path}/ca_crt.pem"
         PASS = var.keystore_passphrase
     }
     working_dir = path.root

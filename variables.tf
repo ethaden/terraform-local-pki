@@ -84,6 +84,12 @@ variable "create_keystores" {
     description = "Set to true to generate keystores for each certificate. Requires \"openssl\" and \"keytool\" on the command line"
 }
 
+variable "include_ca_in_keystores" {
+    type      = bool
+    default   = true
+    description = "Wether or not to include the certificate authority in the generated key stores for servers and clients"
+}
+
 variable "keystore_passphrase" {
     type      = string
     default   = "123456"
