@@ -1,3 +1,7 @@
+locals {
+    cert_path = var.cert_path
+}
+
 
 # Generate a ECDSA key used as part of our Certificate Authority (CA)
 resource "tls_private_key" "ca_key" {
@@ -31,6 +35,7 @@ resource "local_sensitive_file" "ca_key_file" {
 
   content  = tls_self_signed_cert.ca_cert.private_key_pem
   filename = "${var.cert_path}/ca_key.pem"
+  file_permission = "0600"
 }
 
 # Write the CA cert to a file
@@ -40,6 +45,7 @@ resource "local_sensitive_file" "ca_cert_file" {
 
   content  = tls_self_signed_cert.ca_cert.cert_pem
   filename = "${var.cert_path}/ca_crt.pem"
+  file_permission = "0600"
 }
 
 
@@ -95,6 +101,7 @@ resource "local_sensitive_file" "server_cert_files" {
 
   content  = tls_locally_signed_cert.server_certs[each.key].cert_pem
   filename = "${var.cert_path}/server_${each.key}_crt.pem"
+  file_permission = "0600"
 }
 
 resource "local_sensitive_file" "server_key_files" {
@@ -103,16 +110,15 @@ resource "local_sensitive_file" "server_key_files" {
 
   content  = tls_private_key.server_keys[each.key].private_key_pem
   filename = "${var.cert_path}/server_${each.key}_key.pem"
+  file_permission = "0600"
 }
 
 # Optionally, convert client files to key store
 # 1. Convert them to p12 format
-resource "terraform_data" "server_cert_and_key_files_p12" {
+resource "terraform_data" "create_server_keystores" {
   # Do not write files if cert_path is empty. Otherwise try to cast client_names to map of (name => hostname), or if the fails to set of client names
   for_each = try(tomap((var.cert_path == "" || !var.create_keystores) ? {} : var.server_names), toset((var.cert_path == "" || !var.create_keystores) ? [] : var.server_names))
 
-  #filename = "${var.cert_path}/server_${each.key}.p12"
-  #input = local_sensitive_file.server_key_files[each.key]
   triggers_replace = {
     filename = local_sensitive_file.server_key_files[each.key].content
     checksum = sha256(local_sensitive_file.server_key_files[each.key].content)
@@ -130,21 +136,6 @@ resource "terraform_data" "server_cert_and_key_files_p12" {
     }
     working_dir = path.root
   }
-}
-
-data "local_sensitive_file" "server_cert_and_key_files_p12_files" {
-  # Do not write files if cert_path is empty. Otherwise try to cast server_names to map of (name => hostname), or if the fails to set of server names
-  for_each = try(tomap((var.cert_path == "" || !var.create_keystores) ? {} : var.server_names), toset((var.cert_path == "" || !var.create_keystores) ? [] : var.server_names))
-
-  filename = "${var.cert_path}/server_${each.key}.p12"
-  depends_on = [ terraform_data.server_cert_and_key_files_p12 ]
-}
-
-resource "terraform_data" "create_server_keystores" {
-  for_each = try(tomap((var.cert_path == "" || !var.create_keystores) ? {} : var.server_names), toset((var.cert_path == "" || !var.create_keystores) ? [] : var.server_names))
-  triggers_replace = {
-    checksum = sha256(data.local_sensitive_file.server_cert_and_key_files_p12_files[each.key].content)
-  }
   provisioner "local-exec" {
     command     = "keytool -importkeystore -noprompt -deststorepass $PASS -destkeystore $OUTPUT_FILE -srckeystore $INPUT_FILE -srcstoretype PKCS12 -srcstorepass $PASS -alias server"
     environment = {
@@ -155,8 +146,17 @@ resource "terraform_data" "create_server_keystores" {
     }
     working_dir = path.root
   }
+  # Add CA
+  provisioner "local-exec" {
+    command     = "keytool -import -trustcacerts -noprompt -keystore $OUTPUT_FILE -storepass $PASS -alias root -file $CA_FILE"
+    environment = {
+        OUTPUT_FILE = "${var.cert_path}/server_${each.key}.jks"
+        CA_FILE = "${var.cert_path}/ca_crt.pem"
+        PASS = var.keystore_passphrase
+    }
+    working_dir = path.root
+  }
 }
-
 
 #####################################
 # CLIENTS 
@@ -212,6 +212,7 @@ resource "local_sensitive_file" "client_key_files" {
 
   content  = tls_private_key.client_keys[each.key].private_key_pem
   filename = "${var.cert_path}/client_${each.key}_key.pem"
+  file_permission = "0600"
 }
 
 # Write the client certs to files
@@ -221,11 +222,12 @@ resource "local_sensitive_file" "client_cert_files" {
 
   content  = tls_locally_signed_cert.client_certs[each.key].cert_pem
   filename = "${var.cert_path}/client_${each.key}_crt.pem"
+  file_permission = "0600"
 }
 
 # Optionally, convert client files to key store
 # 1. Convert them to p12 format
-resource "terraform_data" "client_cert_and_key_files_p12" {
+resource "terraform_data" "client_create_keystores" {
   # Do not write files if cert_path is empty. Otherwise try to cast client_names to map of (name => hostname), or if the fails to set of client names
   for_each = try(tomap((var.cert_path == "" || !var.create_keystores) ? {} : var.client_names), toset((var.cert_path == "" || !var.create_keystores) ? [] : var.client_names))
 
@@ -246,22 +248,7 @@ resource "terraform_data" "client_cert_and_key_files_p12" {
     }
     working_dir = path.root
   }
-}
-
-data "local_sensitive_file" "client_cert_and_key_files_p12_files" {
-  # Do not write files if cert_path is empty. Otherwise try to cast client_names to map of (name => hostname), or if the fails to set of client names
-#  for_each = try(tomap((var.cert_path == "") ? {} : var.client_names), toset((var.cert_path == "") ? [] : var.client_names)) : try(tomap((var.cert_path == "") ? {} : var.client_names), toset((var.cert_path == "") ? []
-  for_each = try(tomap((var.cert_path == "" || !var.create_keystores) ? {} : var.client_names), toset((var.cert_path == "" || !var.create_keystores) ? [] : var.client_names))
-
-  filename = "${var.cert_path}/client_${each.key}.p12"
-  depends_on = [ terraform_data.client_cert_and_key_files_p12 ]
-}
-
-resource "terraform_data" "create_client_keystores" {
-  for_each = try(tomap((var.cert_path == "" || !var.create_keystores) ? {} : var.client_names), toset((var.cert_path == "" || !var.create_keystores) ? [] : var.client_names))
-  triggers_replace = {
-    checksum = sha256(data.local_sensitive_file.client_cert_and_key_files_p12_files[each.key].content)
-  }
+  # Create JKS
   provisioner "local-exec" {
     command     = "keytool -importkeystore -noprompt -deststorepass $PASS -destkeystore $OUTPUT_FILE -srckeystore $INPUT_FILE -srcstoretype PKCS12 -srcstorepass $PASS -alias client"
     environment = {
@@ -272,4 +259,23 @@ resource "terraform_data" "create_client_keystores" {
     }
     working_dir = path.root
   }
+  # Add CA
+  provisioner "local-exec" {
+    command     = "keytool -import -trustcacerts -noprompt -keystore $OUTPUT_FILE -storepass $PASS -alias root -file $CA_FILE"
+    environment = {
+        OUTPUT_FILE = "${var.cert_path}/client_${each.key}.jks"
+        CA_FILE = "${var.cert_path}/ca_crt.pem"
+        PASS = var.keystore_passphrase
+    }
+    working_dir = path.root
+  }
+}
+
+data "local_sensitive_file" "client_cert_and_key_files_jks_files" {
+  # Do not write files if cert_path is empty. Otherwise try to cast client_names to map of (name => hostname), or if the fails to set of client names
+#  for_each = try(tomap((var.cert_path == "") ? {} : var.client_names), toset((var.cert_path == "") ? [] : var.client_names)) : try(tomap((var.cert_path == "") ? {} : var.client_names), toset((var.cert_path == "") ? []
+  for_each = try(tomap((var.cert_path == "" || !var.create_keystores) ? {} : var.client_names), toset((var.cert_path == "" || !var.create_keystores) ? [] : var.client_names))
+
+  filename = "${var.cert_path}/client_${each.key}.jks"
+  depends_on = [ terraform_data.client_create_keystores ]
 }
