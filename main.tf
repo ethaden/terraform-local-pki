@@ -147,15 +147,15 @@ resource "terraform_data" "create_server_keystores" {
     working_dir = path.root
   }
   # Add CA
-  provisioner "local-exec" {
-    command     = "keytool -import -trustcacerts -noprompt -keystore $OUTPUT_FILE -storepass $PASS -alias root -file $CA_FILE"
-    environment = {
-        OUTPUT_FILE = "${var.cert_path}/server_${each.key}.jks"
-        CA_FILE = "${var.cert_path}/ca_crt.pem"
-        PASS = var.keystore_passphrase
-    }
-    working_dir = path.root
-  }
+#  provisioner "local-exec" {
+#     command     = "keytool -import -trustcacerts -noprompt -keystore $OUTPUT_FILE -storepass $PASS -alias root -file $CA_FILE"
+#     environment = {
+#         OUTPUT_FILE = "${var.cert_path}/server_${each.key}.jks"
+#         CA_FILE = "${var.cert_path}/ca_crt.pem"
+#         PASS = var.keystore_passphrase
+#     }
+#     working_dir = path.root
+#   }
 }
 
 #####################################
@@ -260,15 +260,15 @@ resource "terraform_data" "client_create_keystores" {
     working_dir = path.root
   }
   # Add CA
-  provisioner "local-exec" {
-    command     = "keytool -import -trustcacerts -noprompt -keystore $OUTPUT_FILE -storepass $PASS -alias root -file $CA_FILE"
-    environment = {
-        OUTPUT_FILE = "${var.cert_path}/client_${each.key}.jks"
-        CA_FILE = "${var.cert_path}/ca_crt.pem"
-        PASS = var.keystore_passphrase
-    }
-    working_dir = path.root
-  }
+#   provisioner "local-exec" {
+#     command     = "keytool -import -trustcacerts -noprompt -keystore $OUTPUT_FILE -storepass $PASS -alias root -file $CA_FILE"
+#     environment = {
+#         OUTPUT_FILE = "${var.cert_path}/client_${each.key}.jks"
+#         CA_FILE = "${var.cert_path}/ca_crt.pem"
+#         PASS = var.keystore_passphrase
+#     }
+#     working_dir = path.root
+#   }
 }
 
 data "local_sensitive_file" "client_cert_and_key_files_jks_files" {
