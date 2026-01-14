@@ -70,7 +70,7 @@ resource "tls_cert_request" "openvpn_pki_server_csrs" {
   private_key_pem = tls_private_key.server_keys[each.key].private_key_pem
 
   subject {
-    common_name         = each.key
+    common_name         = each.value
     organization        = var.organization
     organizational_unit = var.organizational_unit
   }
@@ -180,7 +180,7 @@ resource "tls_cert_request" "client_csrs" {
   private_key_pem = tls_private_key.client_keys[each.key].private_key_pem
 
   subject {
-    common_name         = each.key
+    common_name         = each.value
     organization        = var.organization
     organizational_unit = var.organizational_unit
   }
